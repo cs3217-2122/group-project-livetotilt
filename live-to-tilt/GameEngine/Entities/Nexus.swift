@@ -15,6 +15,11 @@ final class Nexus {
         Array(entitiesByComponent[T.identifier, default: []])
     }
 
+    /// Returns the first entity with components of the given type
+    func getEntity<T: Component>(with type: T.Type) -> Entity? {
+        getEntities(with: type).first
+    }
+
     /// Returns all components of a given type
     func getComponents<T: Component>(of type: T.Type) -> [T] {
         var components: [T] = []
@@ -24,6 +29,11 @@ final class Nexus {
         }
 
         return components
+    }
+
+    /// Returns the first component of a given type
+    func getComponent<T: Component>(of type: T.Type) -> T? {
+        getComponents(of: type).first
     }
 
     /// Returns all components of a given type for a given entity
@@ -54,8 +64,26 @@ final class Nexus {
         getComponent(of: type, for: entity) != nil
     }
 
+    /// Removes all components of the given type for the given entity
+    func removeComponents<T: Component>(of type: T.Type, for entity: Entity) {
+        entities[entity, default: [:]][T.identifier] = []
+        entitiesByComponent[T.identifier]?.remove(entity)
+    }
+
+    /// Removes all components of the given type for all entities
+    func removeComponents<T: Component>(of type: T.Type) {
+        let entities = entitiesByComponent[T.identifier, default: []]
+        entities.forEach { entity in
+            removeComponents(of: T.self, for: entity)
+        }
+    }
+
     /// Removes the given entity from the nexus
     func removeEntity(_ entity: Entity) {
+        if hasComponent(EnemyComponent.self, in: entity) {
+            EventManager.shared.postEvent(.enemyKilled)
+        }
+
         entities.removeValue(forKey: entity)
         for identifier in entitiesByComponent.keys {
             entitiesByComponent[identifier]?.remove(entity)

@@ -2,68 +2,50 @@ import CoreGraphics
 
 final class PowerupSystem: System {
     let nexus: Nexus
-    private var elapsedTimeSincePreviousSpawn: CGFloat = .zero
-
-    private var numberOfPowerupsInArena: Int {
-        let powerupComponents = nexus.getComponents(of: PowerupComponent.self)
-
-        return powerupComponents.filter({ !$0.isActive }).count
-    }
 
     init(nexus: Nexus) {
         self.nexus = nexus
     }
 
     func update(deltaTime: CGFloat) {
-        manageSpawning(for: deltaTime)
-        updatePowerups(for: deltaTime)
-    }
+        let powerupComponents = nexus.getComponents(of: PowerupComponent.self)
 
-    private func manageSpawning(for deltaTime: CGFloat) {
-        self.elapsedTimeSincePreviousSpawn += deltaTime
-
-        if self.elapsedTimeSincePreviousSpawn > Constants.powerupSpawnInterval {
-            resetElapsedTime()
-            spawnPowerup()
+        powerupComponents.forEach { powerupComponent in
+            updateElapsedTime(powerupComponent, deltaTime: deltaTime)
+            updateEffectIfActive(powerupComponent, deltaTime: deltaTime)
+            handleCollisions(powerupComponent)
         }
     }
 
-    private func resetElapsedTime() {
-        self.elapsedTimeSincePreviousSpawn.formTruncatingRemainder(dividingBy: Constants.powerupSpawnInterval)
+    func lateUpdate(deltaTime: CGFloat) {}
+
+    private func updateElapsedTime(_ powerupComponent: PowerupComponent, deltaTime: CGFloat) {
+        powerupComponent.elapsedTimeSinceSpawn += deltaTime
     }
 
-    private func spawnPowerup() {
-        guard numberOfPowerupsInArena < Constants.maxNumberOfPowerupsInArena else {
+    private func updateEffectIfActive(_ powerupComponent: PowerupComponent, deltaTime: CGFloat) {
+        if powerupComponent.isActive {
+            powerupComponent.effect.update(for: deltaTime)
+        }
+    }
+
+    private func handleCollisions(_ powerupComponent: PowerupComponent) {
+        let collisionComponents = nexus.getComponents(of: CollisionComponent.self, for: powerupComponent.entity)
+
+        collisionComponents.forEach { collisionComponent in
+            handlePlayerCollision(powerupComponent, collisionComponent)
+        }
+    }
+
+    private func handlePlayerCollision(_ powerupComponent: PowerupComponent, _ collisionComponent: CollisionComponent) {
+        guard powerupComponent.elapsedTimeSinceSpawn > Constants.delayBeforePowerupIsActivatable,
+              nexus.hasComponent(PlayerComponent.self, in: collisionComponent.collidedEntity),
+              !powerupComponent.isActive else {
             return
         }
 
-        let randomSpawnLocation = getRandomSpawnLocation()
-        nexus.createPowerup(position: randomSpawnLocation)
-    }
-
-    private func getRandomSpawnLocation() -> CGPoint {
-        let minX = Constants.powerupDiameter / 2
-        let maxX = Constants.gameArenaHeight * Constants.gameArenaAspectRatio - minX
-        let x = CGFloat.random(in: minX...maxX)
-
-        let minY = Constants.enemyDiameter / 2
-        let maxY = Constants.gameArenaHeight - minY
-        let y = CGFloat.random(in: minY...maxY)
-
-        let position = CGPoint(x: x, y: y)
-
-        return position
-    }
-
-    private func updatePowerups(for deltaTime: CGFloat) {
-        let powerupComponents = nexus.getComponents(of: PowerupComponent.self)
-
-        for powerupComponent in powerupComponents {
-            powerupComponent.elapsedTimeSinceSpawn += deltaTime
-
-            if powerupComponent.isActive {
-                powerupComponent.effect.update(for: deltaTime)
-            }
-        }
+        powerupComponent.isActive = true
+        powerupComponent.effect.activate()
+        nexus.createPowerup()
     }
 }

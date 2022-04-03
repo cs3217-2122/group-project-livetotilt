@@ -2,7 +2,7 @@ import CoreGraphics
 
 final class PhysicsWorld {
 
-    weak var contactDelegate: PhysicsCollisionDelegate?
+    weak var collisionDelegate: PhysicsCollisionDelegate?
     var existingCollisions: Set<Collision>
 
     init() {
@@ -30,31 +30,59 @@ final class PhysicsWorld {
         }
 
         for i in 0..<physicsBodies.count - 1 {
-            let bodyA = physicsBodies[i]
             for j in (i + 1)..<physicsBodies.count {
+                let bodyA = physicsBodies[i]
                 let bodyB = physicsBodies[j]
-                let points = bodyA.collider.checkCollision(with: bodyB.collider)
 
-                guard points.hasCollision else {
+                if !canCollide(bodyA, bodyB) {
                     continue
                 }
 
-                let collision = Collision(bodyA: bodyA, bodyB: bodyB, collisionPoints: points)
-                currentCollisions.insert(collision)
-
-                if !existingCollisions.contains(collision) {
-                    contactDelegate?.didBegin(collision)
+                guard let collision = detectCollision(between: bodyA, and: bodyB) else {
+                    continue
                 }
+
+                currentCollisions.insert(collision)
             }
         }
 
-        // remove collisions that have ended
-        for collision in existingCollisions.subtracting(currentCollisions) {
-            contactDelegate?.didEnd(collision)
-        }
-        existingCollisions = currentCollisions
+        publishCollisions(currentCollisions)
 
         return currentCollisions
+    }
+
+    private func publishCollisions(_ currentCollisions: Set<Collision>) {
+        publishNewCollisions(currentCollisions)
+        publishEndedCollisions(currentCollisions)
+    }
+
+    private func publishNewCollisions(_ currentCollisions: Set<Collision>) {
+        let newCollisions = currentCollisions.subtracting(existingCollisions)
+        for collision in newCollisions {
+            collisionDelegate?.didBegin(collision)
+        }
+    }
+
+    private func publishEndedCollisions(_ currentCollisions: Set<Collision>) {
+        let endedCollisions = existingCollisions.subtracting(currentCollisions)
+        for collision in endedCollisions {
+            collisionDelegate?.didEnd(collision)
+        }
+    }
+
+    private func detectCollision(between bodyA: PhysicsBody, and bodyB: PhysicsBody) -> Collision? {
+        let points = bodyA.collider.checkCollision(with: bodyB.collider)
+
+        guard points.hasCollision else {
+            return nil
+        }
+
+        let collision = Collision(bodyA: bodyA, bodyB: bodyB, collisionPoints: points)
+        return collision
+    }
+
+    private func canCollide(_ bodyA: PhysicsBody, _ bodyB: PhysicsBody) -> Bool {
+        bodyA.collisionBitMask & bodyB.collisionBitMask == 0
     }
 
     private func resolveCollisions(for physicsBodies: [PhysicsBody], deltaTime: CGFloat) {
@@ -94,12 +122,16 @@ final class PhysicsWorld {
         dynamicBody.position += normal * depth
 
         // Resolve velocity
+        guard dynamicBody.restitution != .zero else {
+            return
+        }
+
         let velocity = dynamicBody.velocity
         let angle = normal.angle
 
         dynamicBody.velocity = CGVector(
             dx: -velocity.dx * cos(2 * angle) - velocity.dy * sin(2 * angle),
             dy: -velocity.dx * sin(2 * angle) + velocity.dy * cos(2 * angle)
-        ) * (1 - dynamicBody.restitution)
+        ) * dynamicBody.restitution
     }
 }

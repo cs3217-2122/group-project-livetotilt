@@ -3,41 +3,36 @@ import SwiftUI
 struct GameArenaView: View {
     @ObservedObject var viewModel: GameArenaViewModel
 
-    // Navigation
-    @Environment(\.presentationMode) var presentationMode
-
     var body: some View {
-        VStack {
-            InfoHStack()
-            PlayAreaView()
+        ZStack {
             GameControlView(gameControl: $viewModel.gameControl)
+
+            VStack {
+                InfoHStack()
+                PlayAreaView()
+            }
+            .padding()
+            .modifier(RootView())
+
+            if viewModel.gameStateComponent?.state == .gameOver {
+                GameOverMenuView(viewModel: viewModel)
+            } else if viewModel.gameStateComponent?.state == .pause {
+                PauseMenuView(viewModel: viewModel)
+            }
         }
-        .padding()
-        .modifier(RootView())
+        .onTapGesture {
+            viewModel.pause()
+        }
     }
 
     private func InfoHStack() -> some View {
-        HStack {
-            Button(action: { self.presentationMode.wrappedValue.dismiss() }) {
-                Text("Quit")
-                    .modifier(CapsuleText())
-            }
+        let comboBase = viewModel.comboComponent?.base ?? 0
+        let comboMultiplier = viewModel.comboComponent?.multiplier ?? 0
 
-            HStack {
-                Text("Score: 100").modifier(HeadingOneText())
-            }
-            .modifier(RoundedContainer())
-
-            HStack {
-                Text("Combo: 50x12").modifier(HeadingOneText())
-            }
-            .modifier(RoundedContainer())
-
+        return HStack {
+            Text("wave 10").modifier(InfoText())
             Spacer()
-
-            Text("Achievement")
-                .modifier(HeadingOneText())
-                .modifier(RoundedContainer())
+            Text("combo \(comboBase) x \(comboMultiplier)").modifier(InfoText())
         }
     }
 
@@ -49,18 +44,28 @@ struct GameArenaView: View {
             let denormalization = normalization.inverted()
 
             ZStack {
+                Score()
+
                 ForEach(viewModel.renderableComponents, id: \.id) { renderableComponent in
                     EntityView(from: renderableComponent, applying: denormalization)
                 }
             }
-            .background(Color.LTSecondaryBackground)
+            .frame(width: geometry.size.height * Constants.gameArenaAspectRatio, height: geometry.size.height)
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .stroke(.white, lineWidth: 5)
             )
-            .frame(width: geometry.size.height * Constants.gameArenaAspectRatio, height: geometry.size.height)
             .position(x: frame.midX, y: frame.midY)
         }
+    }
+
+    private func Score() -> some View {
+        let score = viewModel.gameStateComponent?.score ?? 0
+
+        return Text("\(score)")
+            .font(.system(size: 200, weight: .heavy))
+            .monospacedDigit()
+            .opacity(0.15)
     }
 
     // Creates a view that represents an Entity using the Entity's RenderableComponent
@@ -79,12 +84,11 @@ struct GameArenaView: View {
             .zIndex(renderable.layer.rawValue)
             .transition(AnyTransition.opacity.animation(.easeOut(duration: 0.2)))
     }
-
 }
 
 struct GameArenaView_Previews: PreviewProvider {
     static var previews: some View {
-        GameArenaView(viewModel: GameArenaViewModel())
+        GameArenaView(viewModel: GameArenaViewModel(gameMode: .survival))
             .previewInterfaceOrientation(.landscapeLeft)
     }
 }

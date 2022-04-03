@@ -29,9 +29,17 @@ class GameRenderer {
 
         gameControl.stop()
 
-        displayLink.invalidate()
         displayLink.remove(from: .main, forMode: .default)
+        displayLink.invalidate()
         displayLink = nil
+    }
+
+    func pause() {
+        gameEngine.pause()
+    }
+
+    func unpause() {
+        gameEngine.unpause()
     }
 
     @objc
@@ -40,5 +48,6 @@ class GameRenderer {
         let inputForce = gameControl.getInputForce()
 
         gameEngine.update(deltaTime: CGFloat(elapsedTime), inputForce: inputForce)
+        gameEngine.lateUpdate(deltaTime: CGFloat(elapsedTime))
     }
 }

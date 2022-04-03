@@ -5,26 +5,57 @@ struct MainMenuView: View {
 
     var body: some View {
         NavigationView {
-            VStack {
-                Text("Live to Tilt").modifier(TitleText())
+            ZStack(alignment: .center) {
+                Image("menuBackground")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .ignoresSafeArea()
 
-                NavigationLink(destination: LazyView(
-                    GameArenaView(viewModel: GameArenaViewModel())
-                )) {
-                    Text("Play").modifier(CapsuleText())
-                }
+                Image("menuForeground")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .ignoresSafeArea()
 
-                let settingsView = SettingsView()
-                NavigationLink(destination: settingsView) {
-                    Text("Settings").modifier(CapsuleText())
-                }
-            }
-            .modifier(RootView())
-            .onAppear {
-                viewModel.onAppear()
+                Content()
             }
         }
+        .preferredColorScheme(.dark)
         .navigationViewStyle(.stack)
+    }
+
+    private func Content() -> some View {
+        HStack {
+            Spacer()
+            Spacer()
+            Spacer()
+
+            VStack(alignment: .trailing) {
+                Text("live to tilt")
+                    .modifier(HeroText())
+                    .padding(.bottom, 40)
+
+                NavigationLink(destination: LazyView(
+                    GameModeSelectionView()
+                )) {
+                    Text("start").modifier(MenuItemText())
+                }
+
+                // TODO: Link to how to play screen
+                Text("how to play").modifier(MenuItemText())
+
+                NavigationLink(destination: LazyView(
+                    SettingsView()
+                )) {
+                    Text("settings").modifier(MenuItemText())
+                }
+            }
+
+            Spacer()
+        }
+        .rotationEffect(.degrees(15))
+        .onAppear {
+            viewModel.onAppear()
+        }
     }
 }
 
