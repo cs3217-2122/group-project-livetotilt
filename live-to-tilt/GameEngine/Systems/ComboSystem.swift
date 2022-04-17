@@ -1,6 +1,6 @@
 import CoreGraphics
 
-class ComboSystem: System {
+final class ComboSystem: System {
     let nexus: Nexus
 
     init(nexus: Nexus) {
@@ -20,10 +20,10 @@ class ComboSystem: System {
     func lateUpdate(deltaTime: CGFloat) {}
 
     private func subscribeToEvents() {
-        EventManager.shared.registerClosure(event: .enemyKilled, closure: onEnemyKilled)
+        EventManager.shared.registerClosure(for: EnemyKilledEvent.self, closure: onEnemyKilled)
     }
 
-    private lazy var onEnemyKilled = { [weak self] (_ event: Event, _: [EventInfo: Float]?) -> Void in
+    private lazy var onEnemyKilled = { [weak self] (_: Event) -> Void in
         guard let comboComponent = self?.nexus.getComponent(of: ComboComponent.self) else {
             return
         }
@@ -52,9 +52,8 @@ class ComboSystem: System {
     }
 
     private func reset(_ comboComponent: ComboComponent) {
-        let comboScore = comboComponent.base * comboComponent.multiplier
-        EventManager.shared.postEvent(.comboExpired,
-                                      eventInfo: [.comboScore: Float(comboScore)])
+        let comboScore = comboComponent.comboScore
+        EventManager.shared.postEvent(ComboExpiredEvent(comboScore: comboScore))
 
         comboComponent.base = .zero
         comboComponent.multiplier = .zero

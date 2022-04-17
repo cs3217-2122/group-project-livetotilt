@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct PauseMenuView: View {
-    @ObservedObject var viewModel: GameArenaViewModel
-    @Environment(\.presentationMode) var presentationMode
+    var viewModel: Pausable
+    @Environment(\.rootPresentationMode) private var rootPresentationMode
 
     var body: some View {
         Group {
@@ -16,21 +16,24 @@ struct PauseMenuView: View {
             Button(action: { viewModel.resume() }) {
                 Text("Resume").modifier(MenuButton())
             }
+            .modifier(TapSoundEffect())
 
             Button(action: { viewModel.restart() }) {
                 Text("Restart").modifier(MenuButton())
             }
+            .modifier(TapSoundEffect())
 
-            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+            Button(action: { self.rootPresentationMode.wrappedValue.dismiss() }) {
                 Text("Main Menu").modifier(MenuButton())
             }
+            .modifier(TapSoundEffect())
         }.modifier(MenuLayout())
     }
 }
 
 struct PauseMenuView_Previews: PreviewProvider {
     static var previews: some View {
-        PauseMenuView(viewModel: GameArenaViewModel(gameMode: .survival))
+        PauseMenuView(viewModel: SingleplayerGameArenaViewModel(gameMode: .survival))
             .previewInterfaceOrientation(.landscapeLeft)
     }
 }

@@ -5,21 +5,19 @@ class GameStateComponent: Component {
     var state: GameState {
         didSet {
             if state == .gameOver {
-                EventManager.shared.postEvent(.gameEnded)
+                EventManager.shared.postEvent(GameEndedEvent())
             }
         }
     }
-    var score: Int
 
-    enum GameState {
+    enum GameState: String, Codable {
         case play
         case pause
         case gameOver
     }
 
-    init(entity: Entity) {
+    init(entity: Entity, state: GameState = .play) {
         self.entity = entity
-        self.state = .play
-        self.score = .zero
+        self.state = state
     }
 }

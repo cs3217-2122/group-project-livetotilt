@@ -9,8 +9,8 @@ class GameEngine {
     let nexus = Nexus()
     let systems: [System]
     let physicsWorld = PhysicsWorld()
-    let gameStats: GameStats
     let gameMode: GameMode
+    let gameStats: GameStats
 
     // Publishers
     let renderableSubject = PassthroughSubject<[RenderableComponent], Never>()
@@ -25,6 +25,10 @@ class GameEngine {
     var comboPublisher: AnyPublisher<ComboComponent, Never> {
         comboSubject.eraseToAnyPublisher()
     }
+    let countdownSubject = PassthroughSubject<CountdownComponent, Never>()
+    var countdownPublisher: AnyPublisher<CountdownComponent, Never> {
+        countdownSubject.eraseToAnyPublisher()
+    }
 
     init(gameMode: GameMode) {
         EventManager.shared.reinit()
@@ -36,29 +40,36 @@ class GameEngine {
             PhysicsSystem(nexus: nexus, physicsWorld: physicsWorld),
             CollisionSystem(nexus: nexus, physicsWorld: physicsWorld),
             PlayerSystem(nexus: nexus),
-            WaveSystem(nexus: nexus),
+            WaveSpawnerSystem(nexus: nexus),
+            PowerupSpawnerSystem(nexus: nexus),
             PowerupSystem(nexus: nexus),
             EnemySystem(nexus: nexus),
             ComboSystem(nexus: nexus),
-            ScoreSystem(nexus: nexus)
+            ScoreSystem(nexus: nexus),
+            CountdownSystem(nexus: nexus),
+            EnemyKillerSystem(nexus: nexus),
+            EnemyFreezerSystem(nexus: nexus),
+            LifespanSystem(nexus: nexus),
+            AnimationSystem(nexus: nexus),
+            FrozenSystem(nexus: nexus),
+            ArenaBoundarySystem(nexus: nexus)
         ]
-        self.gameStats = GameStats()
         self.gameMode = gameMode
-
+        self.gameStats = GameStats(gameMode: gameMode)
         setUpEntities()
-        EventManager.shared.postEvent(.gameStarted)
+        EventManager.shared.postEvent(GameStartedEvent())
     }
 
     func update(deltaTime: CGFloat, inputForce: CGVector) {
         let scaledTime = deltaTime * timeScale
 
-        if getGameState()?.state == .play {
-            updatePlayer(inputForce: inputForce)
-        }
+        gameStats.incrementPlayTime(deltaTime: scaledTime)
+        updatePlayer(inputForce: inputForce)
         updateSystems(deltaTime: scaledTime)
         publishRenderables()
         publishGameState()
         publishCombo()
+        publishCountdown()
     }
 
     func lateUpdate(deltaTime: CGFloat) {
@@ -85,11 +96,12 @@ class GameEngine {
 
     private func setUpEntities() {
         nexus.createWalls()
-        nexus.createPlayer()
+        nexus.createPlayers(for: gameMode)
         nexus.createGameState()
         nexus.createCombo()
-        nexus.createWaveManager(for: gameMode)
-        nexus.createPowerups()
+        nexus.createWaveSpawner(for: gameMode)
+        nexus.createPowerupSpawner(for: gameMode)
+        nexus.createCountdown(for: gameMode)
     }
 
     private func updateSystems(deltaTime: CGFloat) {
@@ -97,8 +109,12 @@ class GameEngine {
     }
 
     private func updatePlayer(inputForce: CGVector) {
-        let playerComponent = nexus.getComponent(of: PlayerComponent.self)
-        playerComponent?.inputForce = inputForce
+        guard getGameState()?.state == .play else {
+            return
+        }
+        let playerComponents = nexus.getComponents(of: PlayerComponent.self)
+        let playerOneComponent = playerComponents.first(where: { $0.isHost })
+        playerOneComponent?.inputForce = inputForce
     }
 
     private func publishRenderables() {
@@ -106,7 +122,7 @@ class GameEngine {
     }
 
     private func publishGameState() {
-        guard let gameStateComponent = nexus.getComponent(of: GameStateComponent.self) else {
+        guard let gameStateComponent = getGameState() else {
             return
         }
 
@@ -119,6 +135,14 @@ class GameEngine {
         }
 
         comboSubject.send(comboComponent)
+    }
+
+    private func publishCountdown() {
+        guard let countdownComponent = nexus.getComponent(of: CountdownComponent.self) else {
+            return
+        }
+
+        countdownSubject.send(countdownComponent)
     }
 
     private func getGameState() -> GameStateComponent? {

@@ -16,7 +16,8 @@ extension Nexus {
                                                                shape: .rectangle,
                                                                position: position,
                                                                size: size,
-                                                               collisionBitMask: Constants.wallCollisionBitMask)),
+                                                               categoryBitmask: Constants.wallCategoryBitmask,
+                                                               collisionBitmask: Constants.wallCollisionBitmask)),
                      to: entity)
     }
 
@@ -32,12 +33,37 @@ extension Nexus {
         addComponent(ComboComponent(entity: entity), to: entity)
     }
 
-    func createPlayer() {
+    func createPlayers(for gameMode: GameMode) {
         let entity = Entity()
 
         addComponent(PlayerComponent(entity: entity), to: entity)
         addComponent(RenderableComponent(entity: entity,
                                          image: .player,
+                                         position: Constants.playerSpawnPosition,
+                                         size: Constants.playerSize,
+                                         layer: .player),
+                     to: entity)
+        addComponent(PhysicsComponent(entity: entity,
+                                      physicsBody: PhysicsBody(isDynamic: true,
+                                                               shape: .circle,
+                                                               position: Constants.playerSpawnPosition,
+                                                               size: Constants.playerColliderSize,
+                                                               categoryBitmask: Constants.playerCategoryBitmask,
+                                                               collisionBitmask: Constants.playerCollisionBitmask,
+                                                               restitution: .zero)),
+                     to: entity)
+
+        if gameMode == .coop {
+            createPlayerTwo()
+        }
+    }
+
+    private func createPlayerTwo() {
+        let entity = Entity()
+
+        addComponent(PlayerComponent(entity: entity, isHost: false), to: entity)
+        addComponent(RenderableComponent(entity: entity,
+                                         image: .playerTwo,
                                          position: Constants.playerSpawnPosition,
                                          size: Constants.playerSize),
                      to: entity)
@@ -46,19 +72,41 @@ extension Nexus {
                                                                shape: .circle,
                                                                position: Constants.playerSpawnPosition,
                                                                size: Constants.playerColliderSize,
-                                                               collisionBitMask: Constants.playerCollisionBitMask,
+                                                               categoryBitmask: Constants.playerCategoryBitmask,
+                                                               collisionBitmask: Constants.playerCollisionBitmask,
                                                                restitution: .zero)),
                      to: entity)
     }
 
-    func createWaveManager(for gameMode: GameMode) {
+    func createWaveSpawner(for gameMode: GameMode) {
         let entity = Entity()
+        var waveSpawner: WaveSpawner
+        switch gameMode {
+        case .survival, .coop:
+            waveSpawner = SurvivalWaveSpawner()
+        case .gauntlet:
+            waveSpawner = GauntletWaveSpawner()
+        }
 
-        addComponent(WaveManagerComponent(entity: entity, gameMode: gameMode),
+        addComponent(WaveSpawnerComponent(entity: entity, waveSpawner: waveSpawner),
                      to: entity)
     }
 
-    func createEnemy(position: CGPoint, movement: Movement) {
+    func createPowerupSpawner(for gameMode: GameMode) {
+        let entity = Entity()
+        var powerupSpawner: PowerupSpawner
+        switch gameMode {
+        case .survival, .coop:
+            powerupSpawner = SurvivalPowerupSpawner(nexus: self)
+        case .gauntlet:
+            powerupSpawner = GauntletPowerupSpawner(nexus: self)
+        }
+
+        addComponent(PowerupSpawnerComponent(entity: entity, powerupSpawner: powerupSpawner),
+                     to: entity)
+    }
+
+    func createEnemy(position: CGPoint, movement: Movement, despawnOutsideArena: Bool = false) {
         let entity = Entity()
         let transform = CGAffineTransform(scaleX: Constants.enemyFrontToBackRatio, y: Constants.enemyFrontToBackRatio)
         let enemyBackSize = CGSize(width: Constants.enemyDiameter, height: Constants.enemyDiameter)
@@ -82,37 +130,32 @@ extension Nexus {
                                                                shape: .circle,
                                                                position: position,
                                                                size: enemyFrontSize,
-                                                               collisionBitMask: Constants.enemyCollisionBitMask,
+                                                               categoryBitmask: Constants.enemyCategoryBitmask,
+                                                               collisionBitmask: Constants.enemyCollisionBitmask,
                                                                isTrigger: true)),
                      to: entity)
         addComponent(MovementComponent(entity: entity, movement: movement),
                      to: entity)
-        EventManager.shared.postEvent(.enemySpawned)
-    }
+        addComponent(LifespanComponent(entity: entity, lifespan: Constants.enemyLifespan), to: entity)
 
-    func createPowerups() {
-        for _ in 1...Constants.maxNumberOfPowerupsInArena {
-            createPowerup()
+        if despawnOutsideArena {
+            addComponent(ArenaBoundaryComponent(entity: entity), to: entity)
         }
     }
 
-    func createPowerup() {
+    func createPowerup(position: CGPoint,
+                       powerup: Powerup,
+                       velocity: CGVector = .zero,
+                       categoryBitmask: UInt32 = .zero,
+                       collisionBitmask: UInt32 = .zero,
+                       movement: Movement? = nil,
+                       despawnOutsideArena: Bool = false) {
         let entity = Entity()
         let size = CGSize(width: Constants.powerupDiameter, height: Constants.powerupDiameter)
-        let position = generateRandomSpawnLocation(forEntityOfWidth: Constants.powerupDiameter,
-                                                   height: Constants.powerupDiameter)
-        let effects: [PowerupEffect] = [
-            NukeEffect(nexus: self, powerupEntity: entity),
-            LightsaberEffect(nexus: self, powerupEntity: entity)
-        ]
 
-        guard let effect = effects.randomElement() else {
-            return
-        }
-
-        addComponent(PowerupComponent(entity: entity, effect: effect), to: entity)
+        addComponent(PowerupComponent(entity: entity, powerup: powerup), to: entity)
         addComponent(RenderableComponent(entity: entity,
-                                         image: effect.orbImage,
+                                         image: powerup.orbImage,
                                          position: position,
                                          size: size,
                                          layer: .powerup),
@@ -122,25 +165,27 @@ extension Nexus {
                                                                shape: Shape.circle,
                                                                position: position,
                                                                size: size,
-                                                               collisionBitMask: Constants.powerupCollisionBitMask,
-                                                               velocity:
-                                                                CGVector.random(magnitude: Constants.maxPowerupSpeed),
+                                                               categoryBitmask: categoryBitmask,
+                                                               collisionBitmask: collisionBitmask,
+                                                               velocity: velocity,
                                                                restitution: Constants.powerupRestitution)),
                      to: entity)
-        EventManager.shared.postEvent(.powerUpSpawned)
+        addComponent(LifespanComponent(entity: entity), to: entity)
+
+        if let powerupMovement = movement {
+            addComponent(MovementComponent(entity: entity, movement: powerupMovement), to: entity)
+        }
+
+        if despawnOutsideArena {
+            addComponent(ArenaBoundaryComponent(entity: entity), to: entity)
+        }
     }
 
-    private func generateRandomSpawnLocation(forEntityOfWidth width: CGFloat, height: CGFloat) -> CGPoint {
-        let minX = width / 2
-        let maxX = Constants.gameArenaHeight * Constants.gameArenaAspectRatio - minX
-        let x = CGFloat.random(in: minX...maxX)
-
-        let minY = height / 2
-        let maxY = Constants.gameArenaHeight - minY
-        let y = CGFloat.random(in: minY...maxY)
-
-        let position = CGPoint(x: x, y: y)
-
-        return position
+    func createCountdown(for gameMode: GameMode) {
+        if gameMode == .gauntlet {
+            let entity = Entity()
+            addComponent(CountdownComponent(entity: entity, maxTime: Constants.gauntletMaxTime),
+                         to: entity)
+        }
     }
 }

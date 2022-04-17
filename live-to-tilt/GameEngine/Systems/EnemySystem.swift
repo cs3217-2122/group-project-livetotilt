@@ -1,6 +1,6 @@
 import CoreGraphics
 
-class EnemySystem: System {
+final class EnemySystem: System {
     let nexus: Nexus
 
     init(nexus: Nexus) {
@@ -11,44 +11,71 @@ class EnemySystem: System {
         let enemyComponents = nexus.getComponents(of: EnemyComponent.self)
 
         enemyComponents.forEach { enemyComponent in
-            updateElapsedDuration(enemyComponent, deltaTime: deltaTime)
-            despawnIfLifespanOver(enemyComponent)
-            despawnIfOutsideArena(enemyComponent)
+            handleCollisions(enemyComponent)
         }
     }
 
     func lateUpdate(deltaTime: CGFloat) {}
 
-    private func updateElapsedDuration(_ enemyComponent: EnemyComponent, deltaTime: CGFloat) {
-        enemyComponent.elapsedDuration += deltaTime
-    }
+    private func handleCollisions(_ enemyComponent: EnemyComponent) {
+        let collisionComponents = nexus.getComponents(of: CollisionComponent.self, for: enemyComponent.entity)
 
-    private func isLifespanOver(_ enemyComponent: EnemyComponent) -> Bool {
-        enemyComponent.elapsedDuration > Constants.enemyLifespan
-    }
-
-    private func despawnIfLifespanOver(_ enemyComponent: EnemyComponent) {
-        if isLifespanOver(enemyComponent) {
-            nexus.removeEntity(enemyComponent.entity)
+        collisionComponents.forEach { collisionComponent in
+            handlePlayerCollision(enemyComponent, collisionComponent)
         }
     }
 
-    private func isOutsideArena(_ enemyComponent: EnemyComponent) -> Bool {
-        let entity = enemyComponent.entity
-        guard let physicsComponent = nexus.getComponent(of: PhysicsComponent.self, for: entity) else {
+    private func handlePlayerCollision(_ enemyComponent: EnemyComponent, _ collisionComponent: CollisionComponent) {
+        let collidedEntity = collisionComponent.collidedEntity
+
+        if !nexus.hasComponent(PlayerComponent.self, in: collidedEntity) {
+            return
+        }
+
+        if isFrozen(enemyComponent) {
+            AudioController.shared.play(.freezeEnemyDeath)
+            killEnemy(enemyComponent)
+            return
+        }
+
+        if isRecentlySpawned(enemyComponent) {
+            return
+        }
+
+        endGame()
+    }
+
+    private func isFrozen(_ enemyComponent: EnemyComponent) -> Bool {
+        nexus.hasComponent(FrozenComponent.self, in: enemyComponent.entity)
+    }
+
+    private func killEnemy(_ enemyComponent: EnemyComponent) {
+        EventManager.shared.postEvent(EnemyKilledEvent())
+        nexus.removeEntity(enemyComponent.entity)
+    }
+
+    private func isRecentlySpawned(_ enemyComponent: EnemyComponent) -> Bool {
+        guard let lifespanComponent = nexus.getComponent(of: LifespanComponent.self, for: enemyComponent.entity) else {
             return false
         }
-        let physicsBody = physicsComponent.physicsBody
-        let position = physicsBody.position
-        return position.x < Constants.leftWallPosition.x ||
-        position.x > Constants.rightWallPosition.x ||
-        position.y > Constants.bottomWallPosition.y ||
-        position.y < Constants.topWallPosition.y
+        return lifespanComponent.elapsedTimeSinceSpawn < Constants.enemySpawnDelay
     }
 
-    private func despawnIfOutsideArena(_ enemyComponent: EnemyComponent) {
-        if isOutsideArena(enemyComponent) {
-            nexus.removeEntity(enemyComponent.entity)
+    private func endGame() {
+        endComboEarly()
+
+        let gameStateComponent = nexus.getComponent(of: GameStateComponent.self)
+        gameStateComponent?.state = .gameOver
+    }
+
+    private func endComboEarly() {
+        guard let comboComponent = nexus.getComponent(of: ComboComponent.self) else {
+            return
+        }
+
+        let comboScore = comboComponent.comboScore
+        if comboScore > 0 {
+            EventManager.shared.postEvent(ComboExpiredEvent(comboScore: comboScore))
         }
     }
 }

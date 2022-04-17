@@ -2,35 +2,42 @@ import SwiftUI
 
 struct SettingsView: View {
     @StateObject var viewModel = SettingsViewModel()
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.presentationMode) private var presentationMode
 
     var body: some View {
         VStack {
-            Text("Settings").modifier(TitleText())
+            SubViewHeader(title: "Settings", closeButtonAction: { self.presentationMode.wrappedValue.dismiss() })
 
-            VolumeSettingHStack()
+            SoundtrackVolumeSettingHStack()
+
+            SoundEffectVolumeSettingHStack()
 
             SensitivitySettingHStack()
 
             ControlsSettingHStack()
-
-            Button(action: { self.presentationMode.wrappedValue.dismiss() }) {
-                Text("Back")
-                    .padding(.top, 40)
-            }
         }
+        .frame(width: 500)
         .modifier(RootView())
     }
 
-    private func VolumeSettingHStack() -> some View {
+    private func SoundtrackVolumeSettingHStack() -> some View {
         HStack {
-            Text("Volume").modifier(HeadingOneText())
+            Text("BGM").modifier(HeadingOneText())
 
             Slider(value: $viewModel.soundtrackVolume,
-                   in: CGFloat(Constants.minSoundtrackVolume)...CGFloat(Constants.maxSoundtrackVolume))
+                   in: CGFloat(Constants.minVolume)...CGFloat(Constants.maxVolume))
                 .padding()
         }
-        .frame(width: 500)
+    }
+
+    private func SoundEffectVolumeSettingHStack() -> some View {
+        HStack {
+            Text("SFX").modifier(HeadingOneText())
+
+            Slider(value: $viewModel.soundEffectVolume,
+                   in: CGFloat(Constants.minVolume)...CGFloat(Constants.maxVolume))
+                .padding()
+        }
     }
 
     private func SensitivitySettingHStack() -> some View {
@@ -41,7 +48,6 @@ struct SettingsView: View {
                    in: CGFloat(Constants.minSensitivity)...CGFloat(Constants.maxSensitivity))
                 .padding()
         }
-        .frame(width: 500)
     }
 
     private func ControlsSettingHStack() -> some View {
@@ -58,7 +64,6 @@ struct SettingsView: View {
             .pickerStyle(.segmented)
             .padding(.trailing, 10)
         }
-        .frame(width: 500)
     }
 }
 

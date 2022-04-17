@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainMenuView: View {
     @StateObject var viewModel = MainMenuViewModel()
+    @State private var isActive = false
 
     var body: some View {
         NavigationView {
@@ -21,6 +22,7 @@ struct MainMenuView: View {
         }
         .preferredColorScheme(.dark)
         .navigationViewStyle(.stack)
+        .environment(\.rootPresentationMode, self.$isActive)
     }
 
     private func Content() -> some View {
@@ -28,33 +30,41 @@ struct MainMenuView: View {
             Spacer()
             Spacer()
             Spacer()
-
-            VStack(alignment: .trailing) {
-                Text("live to tilt")
-                    .modifier(HeroText())
-                    .padding(.bottom, 40)
-
-                NavigationLink(destination: LazyView(
-                    GameModeSelectionView()
-                )) {
-                    Text("start").modifier(MenuItemText())
-                }
-
-                // TODO: Link to how to play screen
-                Text("how to play").modifier(MenuItemText())
-
-                NavigationLink(destination: LazyView(
-                    SettingsView()
-                )) {
-                    Text("settings").modifier(MenuItemText())
-                }
-            }
-
+            Menu()
             Spacer()
         }
         .rotationEffect(.degrees(15))
         .onAppear {
             viewModel.onAppear()
+        }
+    }
+
+    private func Menu() -> some View {
+        VStack(alignment: .trailing) {
+            Text("live to tilt")
+                .modifier(HeroText())
+                .padding(.bottom, 20)
+
+            NavigationLink(destination: LazyView(GameModeSelectionView()),
+                           isActive: self.$isActive) {
+                Text("start").modifier(MenuItemText())
+            }
+            .modifier(TapSoundEffect())
+
+            NavigationLink(destination: LazyView(HowToPlayView())) {
+                Text("how to play").modifier(MenuItemText())
+            }
+            .modifier(TapSoundEffect())
+
+            NavigationLink(destination: LazyView(AchievementsView())) {
+                Text("achievements").modifier(MenuItemText())
+            }
+            .modifier(TapSoundEffect())
+
+            NavigationLink(destination: LazyView(SettingsView())) {
+                Text("settings").modifier(MenuItemText())
+            }
+            .modifier(TapSoundEffect())
         }
     }
 }

@@ -1,97 +1,114 @@
-import Foundation
+import CoreGraphics
 
+/**
+ Manages the statistics of the current game.
+ */
 class GameStats {
-    let defaults: UserDefaults
+    private let gameMode: GameMode
+    private(set) var score: Int = .zero
+    private(set) var powerupsDespawned: Int = .zero
+    private(set) var powerupsUsed: Int = .zero
+    private(set) var nukePowerupsUsed: Int = .zero
+    private(set) var lightsaberPowerupsUsed: Int = .zero
+    private(set) var freezePowerupsUsed: Int = .zero
+    private(set) var enemiesKilled: Int = .zero {
+        didSet {
+            EventManager.shared.postEvent(EnemiesKilledStatUpdateEvent(gameStats: self))
+        }
+    }
+    private(set) var distanceTravelled: Float = .zero
+    private(set) var playTime: Float = .zero
+    private(set) var wave: Int = .zero
 
-    var totalScore: Int {
-        defaults.integer(forKey: .totalScore) + self.score
-    }
-    var totalPowerupsUsed: Int {
-        defaults.integer(forKey: .totalPowerupsUsed) + self.powerupsUsed
-    }
-    var totalNukePowerupsUsed: Int {
-        defaults.integer(forKey: .totalNukePowerupsUsed) + self.nukePowerupsUsed
-    }
-    var totalLightsaberPowerupsUsed: Int {
-        defaults.integer(forKey: .totalLightsaberPowerupsUsed) + self.lightsaberPowerupsUsed
-    }
-    var totalEnemiesKilled: Int {
-        defaults.integer(forKey: .totalEnemiesKilled) + self.enemiesKilled
-    }
-    var totalGamesPlayed: Int {
-        defaults.integer(forKey: .totalGamesPlayed)
-    }
-    var totalDistanceTravelled: Float {
-        defaults.float(forKey: .totalDistanceTravelled) + self.distanceTravelled
-    }
-
-    var score: Int = .zero
-    var powerupsUsed: Int = .zero
-    var nukePowerupsUsed: Int = .zero
-    var lightsaberPowerupsUsed: Int = .zero
-    var enemiesKilled: Int = .zero
-    var distanceTravelled: Float = .zero
-
-    init() {
-        defaults = UserDefaults.standard
-        registerAllTimeStats()
+    init(gameMode: GameMode) {
+        self.gameMode = gameMode
         observePublishers()
     }
 
-    deinit {
-        updateAllTimeStats()
+    func incrementPlayTime(deltaTime: CGFloat) {
+        playTime += Float(deltaTime)
     }
 
-    func registerAllTimeStats() {
-        defaults.register(defaults: [.totalScore: 0,
-                                     .totalPowerupsUsed: 0,
-                                     .totalNukePowerupsUsed: 0,
-                                     .totalLightsaberPowerupsUsed: 0,
-                                     .totalEnemiesKilled: 0,
-                                     .totalGamesPlayed: 0,
-                                     .totalDistanceTravelled: 0])
+    private func observePublishers() {
+        EventManager.shared.registerClosure(for: GameEndedEvent.self, closure: onStatEventRef)
+        EventManager.shared.registerClosure(for: PowerupDespawnedEvent.self, closure: onStatEventRef)
+        EventManager.shared.registerClosure(for: PowerupUsedEvent.self, closure: onStatEventRef)
+        EventManager.shared.registerClosure(for: ScoreChangedEvent.self, closure: onStatEventRef)
+        EventManager.shared.registerClosure(for: EnemyKilledEvent.self, closure: onStatEventRef)
+        EventManager.shared.registerClosure(for: PlayerMovedEvent.self, closure: onStatEventRef)
+        EventManager.shared.registerClosure(for: WaveSpawnedEvent.self, closure: onStatEventRef)
     }
 
-    func updateAllTimeStats() {
-        defaults.setValue(totalScore, forKey: .totalScore)
-        defaults.setValue(totalPowerupsUsed, forKey: .totalPowerupsUsed)
-        defaults.setValue(totalNukePowerupsUsed, forKey: .totalNukePowerupsUsed)
-        defaults.setValue(totalLightsaberPowerupsUsed, forKey: .totalLightsaberPowerupsUsed)
-        defaults.setValue(totalEnemiesKilled, forKey: .totalEnemiesKilled)
-        defaults.setValue(totalGamesPlayed, forKey: .totalGamesPlayed)
-        defaults.setValue(totalDistanceTravelled, forKey: .totalDistanceTravelled)
+    private lazy var onStatEventRef = { [weak self] (event: Event) -> Void in
+        self?.onStatEvent(event)
     }
 
-    func observePublishers() {
-        for event in Event.allCases {
-            EventManager.shared.registerClosure(event: event, closure: onStatEventRef)
+    /// Update game stats based on the received event
+    ///
+    /// - Parameters:
+    ///   - event: event received
+    private func onStatEvent(_ event: Event) {
+        switch event {
+        case _ as GameEndedEvent:
+            AllTimeStats.shared.addStatsFromLatestGame(self, gameMode)
+
+        case _ as PowerupDespawnedEvent:
+            self.powerupsDespawned += 1
+
+        case let powerupUsedEvent as PowerupUsedEvent:
+            onPowerupUsedEvent(powerupUsedEvent)
+
+        case let scoreChangedEvent as ScoreChangedEvent:
+            self.score += scoreChangedEvent.deltaScore
+
+        case _ as EnemyKilledEvent:
+            self.enemiesKilled += 1
+
+        case let playerMovedEvent as PlayerMovedEvent:
+            self.distanceTravelled += playerMovedEvent.deltaDistance
+
+        case _ as WaveSpawnedEvent:
+            self.wave += 1
+
+        default:
+            return
         }
     }
 
-    private lazy var onStatEventRef = { [weak self] (_ event: Event, _ eventInfo: [EventInfo: Float]?) -> Void in
-        self?.onStatEvent(event, eventInfo)
+    private func onPowerupUsedEvent(_ powerupUsedEvent: PowerupUsedEvent) {
+        if powerupUsedEvent.powerup is NukePowerup {
+            self.nukePowerupsUsed += 1
+        } else if powerupUsedEvent.powerup is LightsaberPowerup {
+            self.lightsaberPowerupsUsed += 1
+        } else if powerupUsedEvent.powerup is FreezePowerup {
+            self.freezePowerupsUsed += 1
+        }
+        self.powerupsUsed += 1
     }
 
-    private func onStatEvent(_ event: Event, _ eventInfo: [EventInfo: Float]?) {
-        switch event {
-        case .gameEnded:
-            self.defaults.setValue(self.totalGamesPlayed + 1, forKey: .totalGamesPlayed)
-        case .nukePowerupUsed:
-            self.nukePowerupsUsed += 1
-            self.powerupsUsed += 1
-        case .lightsaberPowerupUsed:
-            self.lightsaberPowerupsUsed += 1
-            self.powerupsUsed += 1
-        case .enemyKilled:
-            self.enemiesKilled += 1
-        case .playerMoved:
-            let distance = eventInfo?[.distance] ?? .zero
-            self.distanceTravelled += distance
-        case .scoreChanged:
-            let score = eventInfo?[.score] ?? .zero
-            self.score = Int(score)
-        default:
-            return
+    func getBackdropValue() -> String {
+        switch gameMode {
+        case .survival, .coop:
+            return score.withCommas()
+        case .gauntlet:
+            return playTime.toTimeString()
+        }
+    }
+
+    func getGameOverStats() -> [GameOverStat] {
+        switch gameMode {
+        case .survival, .coop:
+            return [
+                GameOverStat(label: "Score", value: score.withCommas()),
+                GameOverStat(label: "Time", value: playTime.toTimeString()),
+                GameOverStat(label: "Dead Dots", value: enemiesKilled.withCommas())
+            ]
+        case .gauntlet:
+            return [
+                GameOverStat(label: "Time", value: playTime.toTimeString()),
+                GameOverStat(label: "Waves", value: wave.withCommas()),
+                GameOverStat(label: "Pickups", value: "\(powerupsUsed) of \(powerupsUsed + powerupsDespawned)")
+            ]
         }
     }
 }

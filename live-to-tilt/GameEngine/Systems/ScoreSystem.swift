@@ -1,6 +1,6 @@
 import CoreGraphics
 
-class ScoreSystem: System {
+final class ScoreSystem: System {
     let nexus: Nexus
 
     init(nexus: Nexus) {
@@ -13,34 +13,27 @@ class ScoreSystem: System {
     func lateUpdate(deltaTime: CGFloat) {}
 
     private func subscribeToEvents() {
-        EventManager.shared.registerClosure(event: .enemyKilled, closure: onGameEvent)
-        EventManager.shared.registerClosure(event: .nukePowerupUsed, closure: onGameEvent)
-        EventManager.shared.registerClosure(event: .lightsaberPowerupUsed, closure: onGameEvent)
-        EventManager.shared.registerClosure(event: .comboExpired, closure: onGameEvent)
+        EventManager.shared.registerClosure(for: PowerupUsedEvent.self, closure: onGameEvent)
+        EventManager.shared.registerClosure(for: EnemyKilledEvent.self, closure: onGameEvent)
+        EventManager.shared.registerClosure(for: ComboExpiredEvent.self, closure: onGameEvent)
     }
 
-    private lazy var onGameEvent = { [weak self] (_ event: Event, eventInfo: [EventInfo: Float]?) -> Void in
-        guard let gameStateComponent = self?.nexus.getComponent(of: GameStateComponent.self),
-              let deltaScore = self?.getDeltaScoreFromEvent(event, eventInfo: eventInfo) else {
+    private lazy var onGameEvent = { [weak self] (event: Event) -> Void in
+        guard let deltaScore = self?.getDeltaScoreFromEvent(event) else {
             return
         }
 
-        gameStateComponent.score += deltaScore
-        EventManager.shared.postEvent(.scoreChanged,
-                                      eventInfo: [.score: Float(gameStateComponent.score)])
+        EventManager.shared.postEvent(ScoreChangedEvent(deltaScore: deltaScore))
     }
 
-    private func getDeltaScoreFromEvent(_ event: Event, eventInfo: [EventInfo: Float]?) -> Int {
+    private func getDeltaScoreFromEvent(_ event: Event) -> Int {
         switch event {
-        case .enemyKilled:
+        case let powerupUsedEvent as PowerupUsedEvent:
+            return powerupUsedEvent.powerup.activationScore
+        case _ as EnemyKilledEvent:
             return Constants.enemyKilledScore
-        case .nukePowerupUsed:
-            return Constants.nukeActivationScore
-        case .lightsaberPowerupUsed:
-            return Constants.lightsaberActivationScore
-        case .comboExpired:
-            let comboScore = eventInfo?[.comboScore] ?? .zero
-            return Int(comboScore)
+        case let comboExpiredEvent as ComboExpiredEvent:
+            return comboExpiredEvent.comboScore
         default:
             return .zero
         }

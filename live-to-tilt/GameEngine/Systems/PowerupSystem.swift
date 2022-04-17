@@ -11,23 +11,11 @@ final class PowerupSystem: System {
         let powerupComponents = nexus.getComponents(of: PowerupComponent.self)
 
         powerupComponents.forEach { powerupComponent in
-            updateElapsedTime(powerupComponent, deltaTime: deltaTime)
-            updateEffectIfActive(powerupComponent, deltaTime: deltaTime)
             handleCollisions(powerupComponent)
         }
     }
 
     func lateUpdate(deltaTime: CGFloat) {}
-
-    private func updateElapsedTime(_ powerupComponent: PowerupComponent, deltaTime: CGFloat) {
-        powerupComponent.elapsedTimeSinceSpawn += deltaTime
-    }
-
-    private func updateEffectIfActive(_ powerupComponent: PowerupComponent, deltaTime: CGFloat) {
-        if powerupComponent.isActive {
-            powerupComponent.effect.update(for: deltaTime)
-        }
-    }
 
     private func handleCollisions(_ powerupComponent: PowerupComponent) {
         let collisionComponents = nexus.getComponents(of: CollisionComponent.self, for: powerupComponent.entity)
@@ -38,14 +26,29 @@ final class PowerupSystem: System {
     }
 
     private func handlePlayerCollision(_ powerupComponent: PowerupComponent, _ collisionComponent: CollisionComponent) {
-        guard powerupComponent.elapsedTimeSinceSpawn > Constants.delayBeforePowerupIsActivatable,
-              nexus.hasComponent(PlayerComponent.self, in: collisionComponent.collidedEntity),
-              !powerupComponent.isActive else {
+        let powerupEntity = powerupComponent.entity
+        let collidedEntity = collisionComponent.collidedEntity
+        guard let playerComponent = nexus.getComponent(of: PlayerComponent.self, for: collidedEntity),
+              !isRecentlySpawned(powerupComponent),
+              let powerupPhysicsComponent = nexus.getComponent(of: PhysicsComponent.self,
+                                                               for: powerupEntity) else {
             return
         }
 
-        powerupComponent.isActive = true
-        powerupComponent.effect.activate()
-        nexus.createPowerup()
+        let powerup = powerupComponent.powerup
+        let powerupPhysicsBody = powerupPhysicsComponent.physicsBody
+        let powerupPosition = powerupPhysicsBody.position
+
+        powerup.activate(nexus: nexus, at: powerupPosition, by: playerComponent)
+        nexus.removeEntity(powerupEntity)
+    }
+
+    private func isRecentlySpawned(_ powerupComponent: PowerupComponent) -> Bool {
+        guard let lifespanComponent = nexus.getComponent(of: LifespanComponent.self,
+                                                         for: powerupComponent.entity) else {
+            return false
+        }
+
+        return lifespanComponent.elapsedTimeSinceSpawn < Constants.delayBeforePowerupIsActivatable
     }
 }
